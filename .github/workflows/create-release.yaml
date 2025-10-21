@@ -53,7 +53,7 @@ jobs:
 
           for f in "${SERVICE_FILES[@]}"; do
             echo "Updating $f"
-            yq eval --inplace '.service.image = (.service.image | sub(":[^:]*$"; ":" + env(DOCKER_TAG)))' service.yaml "$f"
+            yq eval --inplace '.service.image = (.service.image | sub(":[^:]*$"; ":" + env(DOCKER_TAG)))' "$f"
           done
 
           git add "${SERVICE_FILES[@]}"
