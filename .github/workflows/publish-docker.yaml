@@ -1,0 +1,31 @@
+name: CI - Publish Docker image
+
+on:
+  push:
+    # Run when code is pushed to the main branch (e.g., after a merge)
+    branches:
+      - main
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'maven'
+
+      - name: Docker login (Docker Hub)
+        if: ${{ secrets.DOCKERHUB_USERNAME && secrets.DOCKERHUB_TOKEN }}
+        run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+
+      - name: Publish Docker image via Maven
+        env:
+          MAVEN_OPTS: -Xmx1024m
+        run: mvn -B -V -ntp -DskipTests=true docker:publish
