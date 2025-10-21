@@ -5,6 +5,7 @@ on:
     # Run when code is pushed to the main branch (e.g., after a merge)
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   publish:

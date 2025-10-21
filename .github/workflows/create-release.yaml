@@ -1,4 +1,4 @@
-name: Create PR to update service descriptor with new Docker tag
+name: Create Release Pull Request
 
 on:
   workflow_dispatch:
@@ -15,8 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TARGET_REPO: 'aklikic/akka-release-repo'
-      DESCRIPTOR_PATH: 'dev/gcp-us-east1/fintech-demo/'
       TARGET_BRANCH: 'main'
+      DESCRIPTOR_PATH: 'dev/gcp-us-east1/fintech-demo/'
       PR_BRANCH_NAME: 'release-${{ github.event.inputs.docker_tag }}-${{ github.run_id }}'
       DOCKER_TAG: ${{ github.event.inputs.docker_tag }}
       GH_TOKEN: ${{ secrets.GH_TOKEN }}
@@ -45,7 +45,7 @@ jobs:
       - name: Create branch and update service descriptors
         run: |
           cd target-repo
-          git checkout -b "$TARGET_BRANCH"
+          git checkout -b "$PR_BRANCH_NAME"
 
           # Collect service.yaml files
           SERVICE_FILES=()
@@ -53,8 +53,7 @@ jobs:
 
           for f in "${SERVICE_FILES[@]}"; do
             echo "Updating $f"
-            # Update any 'image' fields by replacing the trailing :tag with the new tag.
-            yq eval -i '.. | select(has("image")) | .image = (.image | sub(":[^[:space:]]+$"; ":" + env(DOCKER_TAG)))' "$f"
+            yq eval --inplace '.service.image = (.service.image | sub(":[^:]*$"; ":" + env(DOCKER_TAG)))' "$f"
           done
 
           git add "${SERVICE_FILES[@]}"
