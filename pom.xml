@@ -23,4 +23,20 @@
     <module>corebanking</module>
     <module>backoffice</module>
   </modules>
+  
+  <repositories>
+    <repository>
+      <id>akka-secure</id>
+      <name>Akka Secure</name>
+  <url>https://repo.akka.io/${env.AKKA_REPO_TOKEN}/secure</url>
+    </repository>
+  </repositories>
+
+  <pluginRepositories>
+        <pluginRepository>
+        <id>akka-plugin-repository</id>
+  <url>https://repo.akka.io/${env.AKKA_REPO_TOKEN}/secure</url>
+        </pluginRepository>
+  </pluginRepositories>
+
 </project>

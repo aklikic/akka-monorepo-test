@@ -11,7 +11,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
+    env:
+      AKKA_REPO_TOKEN: ${{ secrets.AKKA_REPO_TOKEN }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
