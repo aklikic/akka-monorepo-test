@@ -29,7 +29,7 @@ jobs:
           echo "Target branch: $TARGET_BRANCH"
 
       - name: Checkout minimal repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Configure git for CI
         run: |
