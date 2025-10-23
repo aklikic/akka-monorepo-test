@@ -103,6 +103,9 @@ jobs:
           java-version: '21'
           cache: 'maven'
 
+      - name: Setup Crane
+        uses: imjasonh/setup-crane@v0.1
+
       - name: Docker login (Docker Hub)
         if: ${{ env.DOCKERHUB_USERNAME && env.DOCKERHUB_TOKEN }}
         uses: docker/login-action@v3
@@ -128,8 +131,10 @@ jobs:
               SOURCE_IMAGE="samirachoscalac/akka-demo:${service}-${NEW_TAG}-dev"
               TARGET_IMAGE="samirachoscalac/akka-demo:${service}-${NEW_TAG}-${ENVIRONMENT}" 
               
-              docker manifest create "$TARGET_IMAGE" "$SOURCE_IMAGE" 
-              docker manifest push "$TARGET_IMAGE"
+              #docker manifest create "$TARGET_IMAGE" "$SOURCE_IMAGE" 
+              #docker manifest push "$TARGET_IMAGE"
+              crane tag "$SOURCE_IMAGE" "$TARGET_IMAGE"
+
               
               #echo "Source image: $SOURCE_IMAGE"
               #echo "Target image: $TARGET_IMAGE"
