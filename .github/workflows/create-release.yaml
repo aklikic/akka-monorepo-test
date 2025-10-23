@@ -180,7 +180,7 @@ jobs:
         run: |
           # Set PR branch name using generated tag
           PR_BRANCH_NAME="release-${NEW_TAG}-${{ github.run_id }}"
-          export DOCKER_TAG = "${NEW_VERSION}-${ENVIRONMENT}"
+          export DOCKER_TAG="${NEW_VERSION}-${ENVIRONMENT}"
 
           cd target-repo
           git checkout -b "$PR_BRANCH_NAME"
