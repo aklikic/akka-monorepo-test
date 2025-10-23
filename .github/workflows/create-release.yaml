@@ -26,6 +26,9 @@ jobs:
       ENVIRONMENT: ${{ github.event.inputs.environment }}
       GH_TOKEN: ${{ secrets.GH_TOKEN }}
       USE_SAME_DOCKER_REPO: 'true'
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      AKKA_REPO_TOKEN: ${{ secrets.AKKA_REPO_TOKEN }}
     steps:
 
       - name: Checkout code
