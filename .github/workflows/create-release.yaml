@@ -127,22 +127,26 @@ jobs:
 
               SOURCE_IMAGE="samirachoscalac/akka-demo:${service}-${NEW_TAG}-dev"
               TARGET_IMAGE="samirachoscalac/akka-demo:${service}-${NEW_TAG}-${ENVIRONMENT}" 
-              echo "Source image: $SOURCE_IMAGE"
-              echo "Target image: $TARGET_IMAGE"
               
-              # Pull the source image
-              echo "Pulling source image..."
-              docker pull "$SOURCE_IMAGE"
+              docker manifest create "$SOURCE_IMAGE" "$TARGET_IMAGE"
+              docker manifest push "$TARGET_IMAGE"
               
-              # Retag the image
-              echo "Retagging image..."
-              docker tag "$SOURCE_IMAGE" "$TARGET_IMAGE"
-              
-              # Push the new tag
-              echo "Pushing retagged image..."
-              docker push "$TARGET_IMAGE"
-              
-              echo "Successfully retagged $SOURCE_IMAGE as $TARGET_IMAGE"   
+              #echo "Source image: $SOURCE_IMAGE"
+              #echo "Target image: $TARGET_IMAGE"
+              #
+              ## Pull the source image
+              #echo "Pulling source image..."
+              #docker pull "$SOURCE_IMAGE"
+              #
+              ## Retag the image
+              #echo "Retagging image..."
+              #docker tag "$SOURCE_IMAGE" "$TARGET_IMAGE"
+              #
+              ## Push the new tag
+              #echo "Pushing retagged image..."
+              #docker push "$TARGET_IMAGE"
+              #
+              #echo "Successfully retagged $SOURCE_IMAGE as $TARGET_IMAGE"   
             done
           fi
 
