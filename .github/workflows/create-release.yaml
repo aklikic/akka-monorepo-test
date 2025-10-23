@@ -152,8 +152,8 @@ jobs:
 
   create-release-pr:
     runs-on: ubuntu-latest
-    needs: [generate-tag, build-and-publish, promote-images]
-    if: always() && (needs.build-and-publish.result == 'success' || needs.promote-images.result == 'success')
+    needs: [generate-tag, build-and-push, promote-images]
+    if: always() && (needs.build-and-push.result == 'success' || needs.promote-images.result == 'success')
     env:
       TARGET_REPO: 'aklikic/akka-release-repo'
       TARGET_BRANCH: 'main'
