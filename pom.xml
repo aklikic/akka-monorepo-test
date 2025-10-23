@@ -18,6 +18,7 @@
     <jib.version>3.4.0</jib.version>
     <docker.registry>docker.io</docker.registry>
     <docker.organization>samirachoscalac</docker.organization>
+    <docker.tag>${project.version}</docker.tag>
   </properties>
 
   <dependencies>
@@ -42,7 +43,7 @@
               <image>eclipse-temurin:21-jre@sha256:615497e30ae2b2654ff7bccc7cb057c27443041994593c726852f04dc99830b1</image>
             </from>
             <to>
-              <image>${docker.registry}/${docker.organization}/akka-demo:${project.artifactId}-${project.version}</image>
+              <image>${docker.registry}/${docker.organization}/akka-demo:${project.artifactId}-${docker.tag}</image>
             </to>
             <container>
                 <mainClass>akka.runtime.AkkaRuntimeMain</mainClass>

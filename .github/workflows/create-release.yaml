@@ -3,12 +3,18 @@ name: Create Release Pull Request
 on:
   workflow_dispatch:
     inputs:
-      docker_tag:
-        description: 'Docker image tag to set in the service descriptors'
+      environment:
+        description: 'Target environment'
         required: true
-        default: 'latest'
-      # Note: target_repo, descriptor_path, target_branch and pr_branch_name are configured as constants
-      # at the job level below. Only docker_tag is provided as an input to the workflow.
+        type: choice
+        options:
+          - dev
+          - prod
+        default: 'dev'
+      tag:
+        description: 'Release tag'
+        required: true
+        default: 'auto'
 
 jobs:
   create-pr:
@@ -16,20 +22,93 @@ jobs:
     env:
       TARGET_REPO: 'aklikic/akka-release-repo'
       TARGET_BRANCH: 'main'
-      DESCRIPTOR_PATH: 'dev/gcp-us-east1/fintech-demo/'
-      PR_BRANCH_NAME: 'release-${{ github.event.inputs.docker_tag }}-${{ github.run_id }}'
-      DOCKER_TAG: ${{ github.event.inputs.docker_tag }}
+      DESCRIPTOR_PATH: '${{ github.event.inputs.environment }}/gcp-us-east1/fintech-demo/'
+      ENVIRONMENT: ${{ github.event.inputs.environment }}
       GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      USE_SAME_DOCKER_REPO: 'true'
     steps:
-      - name: Validate input
-        run: |
-          echo "Docker tag: ${{ github.event.inputs.docker_tag }}"
-          echo "Target repo: $TARGET_REPO"
-          echo "Descriptor path: $DESCRIPTOR_PATH"
-          echo "Target branch: $TARGET_BRANCH"
 
-      - name: Checkout minimal repo
+      - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for tag operations
+
+      - name: Generate release tag
+        id: generate-tag
+        run: |
+          INPUT_TAG="${{ github.event.inputs.tag }}"
+          
+          if [ "$INPUT_TAG" = "auto" ]; then
+            echo "Auto-generating tag based on semantic versioning..."
+            
+            # Fetch all tags
+            git fetch --tags
+            
+            # Get the latest tag for the current environment
+            LATEST_TAG=$(git tag -l "*-${ENVIRONMENT}" | sort -V | tail -n 1)
+            
+            if [ -z "$LATEST_TAG" ]; then
+              # No previous tag found for this environment, start with 1.0.0
+              NEW_VERSION="1.0.0"
+              echo "No previous tag found for environment '${ENVIRONMENT}'. Starting with version 1.0.0"
+            else
+              echo "Latest tag for environment '${ENVIRONMENT}': $LATEST_TAG"
+              # Extract version part (remove environment suffix)
+              VERSION_PART=$(echo "$LATEST_TAG" | sed "s/-${ENVIRONMENT}$//")
+              
+              # Parse semantic version (major.minor.patch)
+              if [[ $VERSION_PART =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+                MAJOR=${BASH_REMATCH[1]}
+                MINOR=${BASH_REMATCH[2]}
+                PATCH=${BASH_REMATCH[3]}
+                
+                # Increment patch version
+                NEW_PATCH=$((PATCH + 1))
+                NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+                echo "Incrementing patch version: ${VERSION_PART} -> ${NEW_VERSION}"
+              else
+                echo "Warning: Latest tag '${VERSION_PART}' doesn't follow semver format. Starting with 1.0.0"
+                NEW_VERSION="1.0.0"
+              fi
+            fi
+            
+            # Create new tag with environment suffix
+            NEW_TAG="${NEW_VERSION}-${ENVIRONMENT}"
+            echo "Generated new tag: $NEW_TAG"
+            
+            # Create and push the tag
+            git tag "$NEW_TAG"
+            git push origin "$NEW_TAG"
+          else
+            echo "Using provided tag: $INPUT_TAG"
+            NEW_TAG="$INPUT_TAG-$ENVIRONMENT"
+            
+            # Create and push the tag
+            git tag "$NEW_TAG"
+            git push origin "$NEW_TAG"
+          fi
+          
+          # Export for use in subsequent steps
+          echo "NEW_TAG=$NEW_TAG" >> $GITHUB_ENV
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'maven'
+
+      - name: Docker login (Docker Hub)
+        if: ${{ env.DOCKERHUB_USERNAME && env.DOCKERHUB_TOKEN }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ env.DOCKERHUB_TOKEN }}
+
+      - name: Publish Docker image via Maven
+        env:
+          MAVEN_OPTS: -Xmx1024m
+        run: mvn package jib:build -DskipTests -Ddocker.tag=${NEW_TAG}
 
       - name: Configure git for CI
         run: |
@@ -44,6 +123,9 @@ jobs:
 
       - name: Create branch and update service descriptors
         run: |
+          # Set PR branch name using generated tag
+          PR_BRANCH_NAME="release-${NEW_TAG}-${{ github.run_id }}"
+          
           cd target-repo
           git checkout -b "$PR_BRANCH_NAME"
 
@@ -53,22 +135,33 @@ jobs:
 
           for f in "${SERVICE_FILES[@]}"; do
             echo "Updating $f"
-            yq eval --inplace '.service.image = (.service.image | sub(":[^:]*$"; ":" + env(DOCKER_TAG)))' "$f"
+            
+            if [ "${USE_SAME_DOCKER_REPO}" = "true" ]; then
+              echo "Using the same Docker repository for all services."
+              yq eval --inplace '.service.image = (.service.image | sub("-[^:]*$"; "-" + env(NEW_TAG)))' "$f"
+            else
+              echo "Using individual Docker repositories for services."
+              yq eval --inplace '.service.image = (.service.image | sub(":[^:]*$"; ":" + env(NEW_TAG)))' "$f"
+            fi
+            
           done
 
           git add "${SERVICE_FILES[@]}"
-          git commit -m "chore: Create release ${DOCKER_TAG}" || echo "No changes to commit"
+          git commit -m "chore: Create release ${NEW_TAG} for ${ENVIRONMENT}" || echo "No changes to commit"
           git push --set-upstream origin "$PR_BRANCH_NAME"
+          
+          # Export PR branch name for next step
+          echo "PR_BRANCH_NAME=$PR_BRANCH_NAME" >> $GITHUB_ENV
 
       - name: Create Pull Request
         run: |
           OWNER=$(echo "$TARGET_REPO" | cut -d/ -f1)
           REPO=$(echo "$TARGET_REPO" | cut -d/ -f2)
-          BODY="Release: ${DOCKER_TAG}\n\nGenerated by workflow ${GITHUB_WORKFLOW} run ${GITHUB_RUN_ID}."
+          BODY="Release: ${NEW_TAG} for ${ENVIRONMENT}\n\nGenerated tag: ${NEW_TAG}\nEnvironment: ${ENVIRONMENT}\n\nGenerated by workflow ${GITHUB_WORKFLOW} run ${GITHUB_RUN_ID}."
 
           RESPONSE=$(curl -s -X POST -H "Authorization: token ${GH_TOKEN}" -H "Accept: application/vnd.github+json" \
             https://api.github.com/repos/${OWNER}/${REPO}/pulls \
-            -d "{\"title\": \"chore: Release ${DOCKER_TAG}\", \"head\": \"${PR_BRANCH_NAME}\", \"base\": \"${TARGET_BRANCH}\", \"body\": \"${BODY}\"}")
+            -d "{\"title\": \"chore: Release ${NEW_TAG} for ${ENVIRONMENT}\", \"head\": \"${PR_BRANCH_NAME}\", \"base\": \"${TARGET_BRANCH}\", \"body\": \"${BODY}\"}")
 
           echo "$RESPONSE"
           PR_URL=$(echo "$RESPONSE" | grep -o '"html_url": *"[^"]*"' | sed -E 's/"html_url": *"([^"]*)"/\1/')
