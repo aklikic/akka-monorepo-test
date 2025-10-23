@@ -12,7 +12,7 @@ on:
           - prod
         default: 'dev'
       tag:
-        description: 'Release tag'
+        description: 'Release tag (e.g., 1.0.0 or auto for automatic generation)'
         required: true
         default: 'auto'
 
