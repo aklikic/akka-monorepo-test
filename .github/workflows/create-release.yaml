@@ -24,8 +24,10 @@ jobs:
       TARGET_BRANCH: 'main'
       DESCRIPTOR_PATH: '${{ github.event.inputs.environment }}/gcp-us-east1/fintech-demo/'
       ENVIRONMENT: ${{ github.event.inputs.environment }}
-      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      INPUT_TAG: ${{ github.event.inputs.tag }}
       USE_SAME_DOCKER_REPO: 'true'
+      SERVICES: 'payments,backoffice,corebanking'
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
       AKKA_REPO_TOKEN: ${{ secrets.AKKA_REPO_TOKEN }}
@@ -39,59 +41,58 @@ jobs:
       - name: Generate release tag
         id: generate-tag
         run: |
-          INPUT_TAG="${{ github.event.inputs.tag }}"
+          
+          get_latest_dev_tag() {
+            git tag -l "*-dev" | sort -V | tail -n 1
+          }
+          
+          increment_version() {
+            local version="$1"
+            if [[ $version =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+              local major=${BASH_REMATCH[1]}
+              local minor=${BASH_REMATCH[2]}
+              local patch=${BASH_REMATCH[3]}
+              echo "${major}.${minor}.$((patch + 1))"
+            else
+              echo "1.0.0"
+            fi
+          }
+          
+          extract_version() {
+            local tag="$1"
+            local env="$2"
+            echo "$tag" | sed "s/-${env}$//"
+          }
+          
+          git fetch --tags
           
           if [ "$INPUT_TAG" = "auto" ]; then
-            echo "Auto-generating tag based on semantic versioning..."
-            
-            # Fetch all tags
-            git fetch --tags
-            
-            # Get the latest tag for the current environment
-            LATEST_TAG=$(git tag -l "*-${ENVIRONMENT}" | sort -V | tail -n 1)
-            
-            if [ -z "$LATEST_TAG" ]; then
-              # No previous tag found for this environment, start with 1.0.0
-              NEW_VERSION="1.0.0"
-              echo "No previous tag found for environment '${ENVIRONMENT}'. Starting with version 1.0.0"
-            else
-              echo "Latest tag for environment '${ENVIRONMENT}': $LATEST_TAG"
-              # Extract version part (remove environment suffix)
-              VERSION_PART=$(echo "$LATEST_TAG" | sed "s/-${ENVIRONMENT}$//")
-              
-              # Parse semantic version (major.minor.patch)
-              if [[ $VERSION_PART =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
-                MAJOR=${BASH_REMATCH[1]}
-                MINOR=${BASH_REMATCH[2]}
-                PATCH=${BASH_REMATCH[3]}
-                
-                # Increment patch version
-                NEW_PATCH=$((PATCH + 1))
-                NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
-                echo "Incrementing patch version: ${VERSION_PART} -> ${NEW_VERSION}"
-              else
-                echo "Warning: Latest tag '${VERSION_PART}' doesn't follow semver format. Starting with 1.0.0"
+            if [ "$ENVIRONMENT" = "dev" ]; then
+              # Dev: increment from latest dev tag
+              LATEST_TAG=$(git tag -l "*-dev" | sort -V | tail -n 1)
+              if [ -z "$LATEST_TAG" ]; then
                 NEW_VERSION="1.0.0"
+              else
+                CURRENT_VERSION=$(extract_version "$LATEST_TAG" "dev")
+                NEW_VERSION=$(increment_version "$CURRENT_VERSION")
               fi
+            else
+              # Non-dev: use latest dev tag version
+              LATEST_DEV_TAG=$(get_latest_dev_tag)
+              [ -z "$LATEST_DEV_TAG" ] && { echo "Error: No dev tag found"; exit 1; }
+              NEW_VERSION=$(extract_version "$LATEST_DEV_TAG" "dev")
             fi
-            
-            # Create new tag with environment suffix
-            NEW_TAG="${NEW_VERSION}-${ENVIRONMENT}"
-            echo "Generated new tag: $NEW_TAG"
-            
-            # Create and push the tag
-            git tag "$NEW_TAG"
-            git push origin "$NEW_TAG"
+            NEW_TAG="${NEW_VERSION}"
           else
-            echo "Using provided tag: $INPUT_TAG"
-            NEW_TAG="$INPUT_TAG-$ENVIRONMENT"
-            
-            # Create and push the tag
-            git tag "$NEW_TAG"
-            git push origin "$NEW_TAG"
+            # Manual tag: use input with environment suffix
+            NEW_TAG="${INPUT_TAG}"
           fi
           
-          # Export for use in subsequent steps
+          TAG="$NEW_TAG-$ENVIRONMENT"
+          echo "Creating tag: $TAG"
+          git tag "$TAG"
+          git push origin "$TAG"
+
           echo "NEW_TAG=$NEW_TAG" >> $GITHUB_ENV
 
       - name: Set up JDK 21
@@ -108,10 +109,41 @@ jobs:
           username: ${{ env.DOCKERHUB_USERNAME }}
           password: ${{ env.DOCKERHUB_TOKEN }}
 
-      - name: Publish Docker image via Maven
+      - name: Publish or Promote Docker image
         env:
           MAVEN_OPTS: -Xmx1024m
-        run: mvn package jib:build -DskipTests -Ddocker.tag=${NEW_TAG}
+        run: |
+          if [ "$ENVIRONMENT" = "dev" ]; then
+            echo "Dev environment: Building and publishing Docker images"
+            mvn package jib:build -DskipTests -Ddocker.tag=${NEW_TAG}
+          else
+
+            echo "Non-dev environment: Retagging existing remote Docker images"
+          
+            services=($(echo "$SERVICES" | tr ',' '\n'))
+
+            for service in ${services[@]}; do
+
+              SOURCE_IMAGE="samirachoscalac/akka-demo:${service}-${NEW_TAG}-dev"
+              TARGET_IMAGE="samirachoscalac/akka-demo:${service}-${NEW_TAG}-${ENVIRONMENT}" 
+              echo "Source image: $SOURCE_IMAGE"
+              echo "Target image: $TARGET_IMAGE"
+              
+              # Pull the source image
+              echo "Pulling source image..."
+              docker pull "$SOURCE_IMAGE"
+              
+              # Retag the image
+              echo "Retagging image..."
+              docker tag "$SOURCE_IMAGE" "$TARGET_IMAGE"
+              
+              # Push the new tag
+              echo "Pushing retagged image..."
+              docker push "$TARGET_IMAGE"
+              
+              echo "Successfully retagged $SOURCE_IMAGE as $TARGET_IMAGE"   
+            done
+          fi
 
       - name: Configure git for CI
         run: |
@@ -150,7 +182,7 @@ jobs:
           done
 
           git add "${SERVICE_FILES[@]}"
-          git commit -m "chore: Create release ${NEW_TAG} for ${ENVIRONMENT}" || echo "No changes to commit"
+          git commit -m "chore: Create release ${NEW_TAG}" || echo "No changes to commit"
           git push --set-upstream origin "$PR_BRANCH_NAME"
           
           # Export PR branch name for next step
