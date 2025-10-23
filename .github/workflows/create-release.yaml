@@ -133,7 +133,7 @@ jobs:
               
               #docker manifest create "$TARGET_IMAGE" "$SOURCE_IMAGE" 
               #docker manifest push "$TARGET_IMAGE"
-              crane tag "$SOURCE_IMAGE" "$TARGET_IMAGE"
+              crane tag "$SOURCE_IMAGE" "${service}-${NEW_TAG}-${ENVIRONMENT}"
 
               
               #echo "Source image: $SOURCE_IMAGE"
