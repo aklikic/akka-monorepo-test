@@ -94,6 +94,7 @@ jobs:
           git push origin "$TAG"
 
           echo "NEW_TAG=$NEW_TAG" >> $GITHUB_ENV
+          echo "DOCKER_TAG=$TAG" >> $GITHUB_ENV
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -115,7 +116,7 @@ jobs:
         run: |
           if [ "$ENVIRONMENT" = "dev" ]; then
             echo "Dev environment: Building and publishing Docker images"
-            mvn package jib:build -DskipTests -Ddocker.tag=${NEW_TAG}
+            mvn package jib:build -DskipTests -Ddocker.tag=${DOCKER_TAG}
           else
 
             echo "Non-dev environment: Retagging existing remote Docker images"
@@ -160,7 +161,7 @@ jobs:
         run: |
           # Set PR branch name using generated tag
           PR_BRANCH_NAME="release-${NEW_TAG}-${{ github.run_id }}"
-          
+
           cd target-repo
           git checkout -b "$PR_BRANCH_NAME"
 
@@ -173,10 +174,10 @@ jobs:
             
             if [ "${USE_SAME_DOCKER_REPO}" = "true" ]; then
               echo "Using the same Docker repository for all services."
-              yq eval --inplace '.service.image = (.service.image | sub("-[^:]*$"; "-" + env(NEW_TAG)))' "$f"
+              yq eval --inplace '.service.image = (.service.image | sub("-[^:]*$"; "-" + env(DOCKER_TAG)))' "$f"
             else
               echo "Using individual Docker repositories for services."
-              yq eval --inplace '.service.image = (.service.image | sub(":[^:]*$"; ":" + env(NEW_TAG)))' "$f"
+              yq eval --inplace '.service.image = (.service.image | sub(":[^:]*$"; ":" + env(DOCKER_TAG)))' "$f"
             fi
 
           done
