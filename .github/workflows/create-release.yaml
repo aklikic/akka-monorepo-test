@@ -19,6 +19,8 @@ on:
 jobs:
   generate-tag:
     runs-on: ubuntu-latest
+    permissions:
+      actions: write
     outputs:
       environment: ${{ steps.generate-tag.outputs.environment }}
       new-version: ${{ steps.generate-tag.outputs.new-version }}
