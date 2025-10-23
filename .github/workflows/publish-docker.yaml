@@ -13,6 +13,7 @@ jobs:
     env:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      AKKA_REPO_TOKEN: ${{ secrets.AKKA_REPO_TOKEN }}
 
     steps:
       - name: Checkout code
