@@ -128,7 +128,7 @@ jobs:
               SOURCE_IMAGE="samirachoscalac/akka-demo:${service}-${NEW_TAG}-dev"
               TARGET_IMAGE="samirachoscalac/akka-demo:${service}-${NEW_TAG}-${ENVIRONMENT}" 
               
-              docker manifest create "$SOURCE_IMAGE" "$TARGET_IMAGE"
+              docker manifest create "$TARGET_IMAGE" $SOURCE_IMAGE" 
               docker manifest push "$TARGET_IMAGE"
               
               #echo "Source image: $SOURCE_IMAGE"
